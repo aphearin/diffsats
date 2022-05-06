@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-PACKAGENAME = "satjax"
+PACKAGENAME = "diffsats"
 VERSION = "0.0.dev"
 
 
@@ -14,5 +14,5 @@ setup(
     long_description="Just some package",
     install_requires=["numpy", "jax", "scipy"],
     packages=find_packages(),
-    url="https://github.com/aphearin/satjax",
+    url="https://github.com/aphearin/diffsats",
 )
