@@ -56,9 +56,56 @@ def grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
     fR, fphi, fz = fac * R, fac * 0.0, fac * z
     return fR, fphi, fz
 
+@jjit
+def sigma(R,z,...):
+    """
+    NFW.sigma
+    """
+    pass
 
 @jjit
-def rhs_orbit_ode(t, y, p, m, sigmamx, Xd):
+def rho(R,z,...):
+    """
+    NFW.rho
+    """
+    pass
+
+
+@jjit
+def df_accel(xv,m,Mh, Deltah, redshift, littleh, Om, OL):
+    """
+    Dynamical-friction (DF) acceleration [(kpc/Gyr)^2 kpc^-1] given 
+    satellite mass, phase-space coordinate, and axisymmetric host
+    potential:
+    
+        f_DF = -4piG^2 m Sum_i rho_i(R,z)F(<|V_i|)ln(Lambda_i)V_i/|V_i|^3  
+    
+    where
+        
+        V_i: relative velocity (vector) of the satellite with respect to 
+            the host component i
+        F(<|V_i|) = erf(X) - 2X/sqrt{pi} exp(-X^2) with 
+            X = |V_i| / (sqrt{2} sigma(R,z))
+        ln(Lambda_i): Coulomb log of host component i 
+
+    """
+    R, phi, z, VR, Vphi, Vz = xv
+    VrelR = VR
+    Vrelphi = Vphi
+    Vrelz = Vz
+    Vrel = np.sqrt(VrelR**2.+Vrelphi**2.+Vrelz**2.)
+    Vrel = max(Vrel,cfg.eps) # safety
+    lnL = np.log(Mh/m) # Coulomb logarithm
+    X = Vrel / (cfg.Root2 * sigma(R,z, ...))
+    fac_s = rho(R,z) * lnL * ( erf(X) - cfg.TwoOverRootPi * X*np.exp(-X**2.) ) / Vrel**3 
+    fac = -cfg.FourPiGsqr * m # common factor in f_DF 
+    fR = fac*fac_s * VrelR
+    fphi = fac*fac_s * Vrelphi
+    fz = fac*fac_s * Vrelz
+    return fR, fphi, fz
+
+@jjit
+def rhs_orbit_ode(t, y,  conc, rs, Deltah, redshift, littleh, Om, OL):
     """
     Returns right-hand-side functions of the EOMs for orbit integration:
 
@@ -75,3 +122,4 @@ def rhs_orbit_ode(t, y, p, m, sigmamx, Xd):
     # Not sure yet how to handle the additional arguments accepted by grav_accel
     fR, fphi, fz = grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL)
     return VR, Vphi / R, Vz, Vphi**2.0 / R + fR, -VR * Vphi / R + fphi, fz
+
