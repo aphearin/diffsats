@@ -5,15 +5,17 @@ This JAX-based implementation mirrors SatGen as closely as possible.
 """
 from jax import jit as jjit
 from jax import numpy as jnp
+from jax.scipy.special import erf
+from jax.experimental.ode import odeint as jodeint
 
 
 NEWTON_G = 4.4985e-06  # gravitational constant [kpc^3 Gyr^-2 Msun^-1]
 RHOC0 = 277.5  # [h^2 Msun kpc^-3]
-
+EPS = 0.001 # an infinitesimal for various purposes
 
 @jjit
-def rho_crit(z, h, Om, OL):
-    return RHOC0 * h**2 * (Om * (1.0 + z) ** 3 + OL)
+def rho_crit(z, littleh, Om, OL):
+    return RHOC0 * littleh**2 * (Om * (1.0 + z) ** 3 + OL)
 
 
 @jjit
@@ -21,14 +23,30 @@ def _nfw_f(x):
     one_plus_x = 1.0 + x
     return jnp.log(one_plus_x) - x / one_plus_x
 
-
+@jjit
+def _get_rho0(conc, rs, Deltah, redshift, littleh, Om, OL):
+    rhoc = rho_crit(redshift, littleh, Om, OL)
+    rho0 = rhoc * Deltah / 3.0 * conc**3.0 / _nfw_f(conc)
+    return rho0
+    
 @jjit
 def _get_phi0(conc, rs, Deltah, redshift, littleh, Om, OL):
     rhoc = rho_crit(redshift, littleh, Om, OL)
-    rho0 = rhoc * Deltah / 3.0 * conc**3.0 / _nfw_f(conc)
+    rho0 = _get_rho0(conc, rs, Deltah, redshift, littleh, Om, OL)
     phi0 = -4.0 * jnp.pi * NEWTON_G * rho0 * rs**2.0
     return phi0
 
+@jjit
+def _get_rmax(rs):
+    return 2.163 * rs
+    
+@jjit
+def circ_vel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
+    """
+    Circular velocity [kpc/Gyr] at radius r = sqrt(R^2 + z^2).
+    """
+    r = jnp.sqrt(R**2.+z**2.)
+    return jnp.sqrt(r*-grav_accel(r,0.,conc, rs, Deltah, redshift, littleh, Om, OL)[0])
 
 @jjit
 def grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
@@ -57,55 +75,74 @@ def grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
     return fR, fphi, fz
 
 @jjit
-def sigma(R,z,...):
+def vel_disp(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
     """
-    NFW.sigma
+    Velocity dispersion [kpc/Gyr] at radius r = sqrt(R^2 + z^2), 
+    assuming isotropic velicity dispersion tensor, following the 
+    Zentner & Bullock (2003) fitting function.
     """
-    pass
+    r = jnp.sqrt(R**2.+z**2.)
+    x = r / rs
+    rmax = _get_rmax(rs)
+    Vmax = circ_vel(rmax, 0., conc, rs, Deltah, redshift, littleh, Om, OL)
+    return Vmax * 1.4393 * x**0.354 / (1. + 1.1756 * x**0.725)
 
 @jjit
-def rho(R,z,...):
+def density(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
     """
-    NFW.rho
+    Density [M_sun kpc^-3] at radius r = sqrt(R^2 + z^2). 
     """
-    pass
-
-
-@jjit
-def df_accel(xv,m,Mh, Deltah, redshift, littleh, Om, OL):
-    """
-    Dynamical-friction (DF) acceleration [(kpc/Gyr)^2 kpc^-1] given 
-    satellite mass, phase-space coordinate, and axisymmetric host
-    potential:
+    r = jnp.sqrt(R**2.+z**2.) 
+    x = r / rs
+    rho0 = _get_rho0(conc, rs, Deltah, redshift, littleh, Om, OL)
+    return rho0 / (x * (1.+x)**2.)
     
-        f_DF = -4piG^2 m Sum_i rho_i(R,z)F(<|V_i|)ln(Lambda_i)V_i/|V_i|^3  
+@jjit
+def df_accel(xv, m, conc, rs, Deltah, redshift, littleh, Om, OL):
+    """
+    Dynamical-friction (DF) acceleration [(kpc/Gyr)^2 kpc^-1]
+    
+        f_df = -4piG^2 m rho(R,z) F(<|V|) lnL V/|V|^3  
     
     where
         
-        V_i: relative velocity (vector) of the satellite with respect to 
+        V: relative velocity (vector) of the satellite with respect to 
             the host component i
-        F(<|V_i|) = erf(X) - 2X/sqrt{pi} exp(-X^2) with 
-            X = |V_i| / (sqrt{2} sigma(R,z))
-        ln(Lambda_i): Coulomb log of host component i 
-
+        F(<|V|) = erf(X) - 2X/sqrt{pi} exp(-X^2) with 
+            X = |V| / (sqrt{2} sigma(R,z))
+        lnL: Coulomb log
+        
+     Syntax:
+    
+        df_accel(xv, m, conc, rs, Deltah, redshift, littleh, Om, OL)
+          
+    where 
+    
+        xv: phase-space coordinates in a cylindrical frame
+            [R,phi,z,VR,Vphi,Vz] 
+            [kpc,radian,kpc,kpc/Gyr,kpc/Gyr,kpc/Gyr] (array)
+        m: satellite mass [M_sun] (float)
+        ...
+        ...
     """
     R, phi, z, VR, Vphi, Vz = xv
     VrelR = VR
     Vrelphi = Vphi
     Vrelz = Vz
-    Vrel = np.sqrt(VrelR**2.+Vrelphi**2.+Vrelz**2.)
-    Vrel = max(Vrel,cfg.eps) # safety
-    lnL = np.log(Mh/m) # Coulomb logarithm
-    X = Vrel / (cfg.Root2 * sigma(R,z, ...))
-    fac_s = rho(R,z) * lnL * ( erf(X) - cfg.TwoOverRootPi * X*np.exp(-X**2.) ) / Vrel**3 
-    fac = -cfg.FourPiGsqr * m # common factor in f_DF 
-    fR = fac*fac_s * VrelR
-    fphi = fac*fac_s * Vrelphi
-    fz = fac*fac_s * Vrelz
+    Vrel = jnp.sqrt(VrelR**2.+Vrelphi**2.+Vrelz**2.)
+    #Vrel = max(Vrel,EPS) # safety <<< jax complains about it...
+    lnL = 3. # <<< to be updated, for testing, just use constant Coulomb logarithm
+    X = Vrel / (jnp.sqrt(2.) * vel_disp(R, z, conc, rs, Deltah, redshift, littleh, Om, OL))
+    rho = density(R, z, conc, rs, Deltah, redshift, littleh, Om, OL)
+    fac_s = rho * lnL * ( erf(X) - 2./jnp.sqrt(jnp.pi) * X*jnp.exp(-X**2.) ) / Vrel**3 
+    fac = - 4. * jnp.pi * NEWTON_G**2. * m # common pre factor 
+    fR = fac * fac_s * VrelR
+    fphi = fac * fac_s * Vrelphi
+    fz = fac * fac_s * Vrelz
     return fR, fphi, fz
 
 @jjit
-def rhs_orbit_ode(t, y,  conc, rs, Deltah, redshift, littleh, Om, OL):
+def rhs_orbit_ode(y, t, *args):
     """
     Returns right-hand-side functions of the EOMs for orbit integration:
 
@@ -115,11 +152,13 @@ def rhs_orbit_ode(t, y,  conc, rs, Deltah, redshift, littleh, Om, OL):
         d VR / dt = Vphi^2 / R + fR
         d Vphi / dt = - VR * Vphi / R + fphi
         d Vz / d t = fz
-
     """
     R, phi, z, VR, Vphi, Vz = y
-    R = max(R, 1e-6)
-    # Not sure yet how to handle the additional arguments accepted by grav_accel
-    fR, fphi, fz = grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL)
+    m, conc, rs, Deltah, redshift, littleh, Om, OL = args # the arguments to be used by grav_accel
+    fR_grav, fphi_grav, fz_grav = grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL)
+    fR_df, fphi_df, fz_df = df_accel(y, m, conc, rs, Deltah, redshift, littleh, Om, OL)
+    fR = fR_grav + fR_df
+    fphi = fphi_grav + fphi_df
+    fz = fz_grav + fz_df
     return VR, Vphi / R, Vz, Vphi**2.0 / R + fR, -VR * Vphi / R + fphi, fz
 
