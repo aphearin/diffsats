@@ -10,7 +10,7 @@ from jax.scipy.special import erf
 
 NEWTON_G = 4.4985e-06  # gravitational constant [kpc^3 Gyr^-2 Msun^-1]
 RHOC0 = 277.5  # [h^2 Msun kpc^-3]
-EPS = 0.0005  # an infinitesimal for various purposes
+EPS = 0.001  # an infinitesimal for various purposes
 
 
 @jjit
