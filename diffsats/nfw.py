@@ -78,7 +78,7 @@ def circ_vel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL):
     Returns
     -------
     vcirc : float
-        Circular velocity in km/Gyr
+        Circular velocity in kpc/Gyr
 
     """
     r = jnp.sqrt(R**2.0 + z**2.0)
@@ -357,3 +357,22 @@ def rhs_orbit_ode(y, t, m, conc, rs, Deltah, redshift, littleh, Om, OL):
     fphi = fphi_grav + fphi_df
     fz = fz_grav + fz_df
     return VR, Vphi / R, Vz, Vphi**2.0 / R + fR, -VR * Vphi / R + fphi, fz
+
+
+@jjit
+def rhs_orbit_ode_noDF(y, t, m, conc, rs, Deltah, redshift, littleh, Om, OL):
+    '''
+    The same parameters and initial equations as the function above,
+    except that there is no additional term for the dynamical
+    friction when calculating the total acceleration.
+
+    This is also done in the same manner in SatGen.
+    '''
+    R, phi, z, VR, Vphi, Vz = y
+
+    fR_grav, fphi_grav, fz_grav = grav_accel(R, z, conc, rs, Deltah, redshift, littleh, Om, OL)
+    fR = fR_grav
+    fphi = fphi_grav
+    fz = fz_grav
+    
+    return VR, Vphi/R, Vz, Vphi**2.0/R + fR, -VR*Vphi/R + fphi, fz
