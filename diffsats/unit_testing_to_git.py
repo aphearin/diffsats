@@ -1,14 +1,27 @@
 
-def test_orbit_UNIT(Mhost_, mass_ratio, conc_,  R0_, phi0_max, 
+# ### Unit testing with Dynamical Friction
+# 
+# Comparing SatGen DF to diffsats DF.
+
+
+
+def test_orbit_UNIT_DF(Mhost_, mass_ratio, conc_, phi0_max, 
                     z0_max, VR0_max, Vz0_max, tfinal_, steps):
     '''
     Make sure that test particle in SatGen and diffsats
-    NFW profile have the same orbit.
+    NFW profile have the same orbit. This function tests
+    with dynamical friction included.
+    
+    In nfw.py, this uses the rhs_orbit_ode function.
+    
+    Uses RK method.
     '''
     
     #===== SatGen host potential =====
     M, conc = Mhost_, conc_
-    hNFW = pr.NFW(M, conc)
+    Delta_BN = co.DeltaBN(z=0, Om=0.3, OL=0.7)
+    hNFW = NFW(M, conc, Delta=Delta_BN)
+    potential = [hNFW]
     rs = hNFW.rs
     Deltah = hNFW.Deltah
     redshift = hNFW.z
@@ -23,8 +36,9 @@ def test_orbit_UNIT(Mhost_, mass_ratio, conc_,  R0_, phi0_max,
     
     #===== SatGen Orbit Integration =====
     
-    R = np.full((steps), R0_)
-    Vphi = np.full((steps), hNFW.Vcirc(R0_))
+    R = np.full((1), hNFW.rh)
+    #Vphi = np.full((1), Vcirc(potential, hNFW.rh, z0_max)*0.5)
+    Vphi = np.full((1), Vcirc(potential, hNFW.rh)*0.5)
     phi0_vals = np.linspace(0, phi0_max, steps)
     z0_vals = np.linspace(0, z0_max, steps)
     VR0_vals = np.linspace(0, VR0_max, steps)
@@ -52,7 +66,6 @@ def test_orbit_UNIT(Mhost_, mass_ratio, conc_,  R0_, phi0_max,
         o_SG[i].integrate(t, hNFW, m)
         oint_SG.append(o_SG[i])
 
-    # o.integrate(t,hNFW, m=None) # no DF
     R_SG = []
     phi_SG = []
     for i in range(len(oint_SG)):
@@ -61,8 +74,7 @@ def test_orbit_UNIT(Mhost_, mass_ratio, conc_,  R0_, phi0_max,
         
         R_SG.append(R_SatGen)
         phi_SG.append(phi_SatGen)
-    print('')
-
+        
     #===== diffsats Orbit Integration =====
     
     #--- Looping over multiple i.c. values
@@ -94,15 +106,23 @@ def test_orbit_UNIT(Mhost_, mass_ratio, conc_,  R0_, phi0_max,
         R_DS.append(R_diffsats)
         phi_DS.append(phi_diffsats)
 
+    idx_range = int(len(phi_DS)/steps)    
+
     for i in range(len(R_DS)):
         for j in range(len(R_SG)):
-            assert abs(R_DS[i] - R_SG[j]) / R_SG[j] < cfg.eps
+            np.testing.assert_allclose(R_DS[i], R_SG[j], rtol=1e-2, atol=1e-2)
 
-    for i in range(len(phi_DS)):
-        for j in range(len(phi_SG)):
-            assert abs(phi_DS[i] - phi_SG[j]) / phi_SG[j] < cfg.eps
+    for i in range(len(phi_DS[0:idx_range])):
+        for j in range(len(phi_SG[0:idx_range])):
+            np.testing.assert_allclose(phi_DS[i], phi_SG[j], rtol=1e-2, atol=1e-2)
     
 
+
+
+# Below is an example of a successful test.
+
+# test_orbit_UNIT_DF(Mhost_=1e13, mass_ratio=1e-2, conc_=5.0, 
+#                phi0_max=0.0, z0_max=0.0, VR0_max=0.0, Vz0_max=0.0, tfinal_=10, steps=2)
 
 
 
