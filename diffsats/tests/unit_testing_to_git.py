@@ -3,11 +3,24 @@
 Comparing SatGen noDF to diffsats noDF.
 """
 import numpy as np
+import pytest
+from jax import numpy as jnp
+from jax.experimental.ode import odeint as jodeint
+from ..nfw import rhs_orbit_ode
+
+try:
+    from SatGen import config as cfg
+    from SatGen import cosmo as co
+    from SatGen.profiles import NFW, Vcirc
+    from SatGen.orbit import orbit
+
+    HAS_TESTING_DEPENDENCIES = True
+except (ImportError, AttributeError):
+    HAS_TESTING_DEPENDENCIES = False
 
 
-def test_orbit_UNIT_DF(
-    Mhost_, mass_ratio, conc_, phi0_max, z0_max, VR0_max, Vz0_max, tfinal_, steps
-):
+@pytest.mark.skipif("not HAS_TESTING_DEPENDENCIES")
+def test_orbit_UNIT_DF():
     """
     Make sure that test particle in SatGen and diffsats
     NFW profile have the same orbit. This function tests
@@ -17,6 +30,15 @@ def test_orbit_UNIT_DF(
 
     Uses RK method.
     """
+    Mhost_ = 1e13
+    mass_ratio = 1e-6
+    conc_ = 5.0
+    phi0_max = 0.0
+    z0_max = 0.0
+    VR0_max = 0.0
+    Vz0_max = 0.0
+    tfinal_ = 10
+    steps = 2
 
     # ===== SatGen host potential =====
     M, conc = Mhost_, conc_
@@ -52,7 +74,7 @@ def test_orbit_UNIT_DF(
             for i in range(len(z0_vals)):
                 for j in range(len(VR0_vals)):
                     for k in range(len(Vphi)):
-                        for l in range(len(Vz0_vals)):
+                        for ell in range(len(Vz0_vals)):
                             xv_in_loop = np.array(
                                 [
                                     R[g],
@@ -60,7 +82,7 @@ def test_orbit_UNIT_DF(
                                     z0_vals[i],
                                     VR0_vals[j],
                                     Vphi[k],
-                                    Vz0_vals[l],
+                                    Vz0_vals[ell],
                                 ]
                             )
                             xv_SG.append(xv_in_loop)
@@ -93,7 +115,7 @@ def test_orbit_UNIT_DF(
             for i in range(len(z0_vals)):
                 for j in range(len(VR0_vals)):
                     for k in range(len(Vphi)):
-                        for l in range(len(Vz0_vals)):
+                        for ell in range(len(Vz0_vals)):
                             xv_in_loop = jnp.array(
                                 [
                                     R[g],
@@ -101,7 +123,7 @@ def test_orbit_UNIT_DF(
                                     z0_vals[i],
                                     VR0_vals[j],
                                     Vphi[k],
-                                    Vz0_vals[l],
+                                    Vz0_vals[ell],
                                 ]
                             )
                             xv_DS.append(xv_in_loop)
@@ -111,7 +133,7 @@ def test_orbit_UNIT_DF(
 
     xvArray = []
     for i in range(len(xv_DS)):
-        xvArray_vals = jodeint(nfw.rhs_orbit_ode, xv_DS[i], t, *args)
+        xvArray_vals = jodeint(rhs_orbit_ode, xv_DS[i], t, *args)
         xvArray.append(xvArray_vals)
 
     R_DS = []
