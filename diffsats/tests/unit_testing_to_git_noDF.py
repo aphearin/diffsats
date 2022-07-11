@@ -11,7 +11,7 @@ from ..nfw import rhs_orbit_ode_noDF
 try:
     from SatGen import config as cfg
     from SatGen import cosmo as co
-    from SatGen.profiles import NFW
+    from SatGen.profiles import NFW, Vcirc
     from SatGen.orbit import orbit
     from halotools.empirical_models import NFWPhaseSpace
 
@@ -67,7 +67,7 @@ def test_orbit_UNIT_noDF():
     phi0_vals = np.linspace(0, phi0_max, steps)
     z0_vals = np.linspace(0, z0_max, steps)
     VR0_vals = np.linspace(0, VR0_max, steps)
-    Vphi = np.full((1), hNFW.Vcirc(potential, hNFW.rh, z0_max) * 0.5)
+    Vphi = np.full((1), Vcirc(potential, hNFW.rh, z0_max) * 0.5)
     Vz0_vals = np.linspace(0, Vz0_max, steps)
 
     # --- Looping over multiple i.c. values
