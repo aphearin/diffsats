@@ -215,9 +215,11 @@ def d_peri_finder(list_name):
     Computes the pericentric distance as local minimum values
     from the 3D distance (rho). 
     '''
-    return[minval for i, minval in enumerate(list_name)
-          if ((i == 0) or (list_name[i-1] >= minval))
-          and ((i == len(list_name) - 1) or (minval < list_name[i+1]))]
+    return [ 
+            minval for i, minval in enumerate(list_name)
+            if ((i == 0) or (list_name[i-1] >= minval))
+            and ((i == len(list_name) - 1) or (minval < list_name[i+1]))
+	   ]
 
 
 def d_t_peri_finder(list_name, time_array):
