@@ -1,6 +1,6 @@
-# ### Unit testing with Dynamical Friction
-#
-# Comparing SatGen DF to diffsats DF.
+"""
+"""
+from SatGen.profiles import NFW, Vcirc
 
 
 def test_orbit_UNIT_DF(

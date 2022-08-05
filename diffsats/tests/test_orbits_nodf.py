@@ -1,6 +1,5 @@
-# ### Unit testing without Dynamical Friction
-#
-# Comparing SatGen noDF to diffsats noDF.
+"""
+"""
 
 
 def test_orbit_UNIT_noDF(
